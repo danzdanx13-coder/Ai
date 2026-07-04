@@ -16,43 +16,39 @@ Pertanyaan simpel jawab 1-3 kalimat. Perkenalkan dirimu sebagai "Damz AI" jika d
 
   try {
     const { messages } = JSON.parse(event.body);
+    const groqMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...messages];
 
-    const geminiContents = messages.map(msg => {
-      const role = msg.role === 'assistant' ? 'model' : 'user';
-      const parts = [];
-      if (typeof msg.content === 'string') {
-        parts.push({ text: msg.content });
-      } else if (Array.isArray(msg.content)) {
-        msg.content.forEach(item => {
-          if (item.type === 'text') parts.push({ text: item.text });
-          else if (item.type === 'image') parts.push({ inline_data: { mime_type: item.mime_type, data: item.data } });
-        });
-      }
-      return { role, parts };
-    });
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.API_KEY}`;
-
-    const response = await fetch(url, {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + process.env.API_KEY
+      },
       body: JSON.stringify({
-        contents: geminiContents,
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.7 }
+        model: 'llama-3.3-70b-versatile',
+        messages: groqMessages,
+        max_tokens: 2048,
+        temperature: 0.7
       })
     });
 
     const data = await response.json();
-
     if (data.error) {
-      return { statusCode: 200, headers, body: JSON.stringify({ error: { message: data.error.message } }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ error: data.error }) };
     }
 
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Maaf, tidak bisa merespons.';
-    return { statusCode: 200, headers, body: JSON.stringify({ content: [{ text: reply }] }) };
+    const reply = data.choices?.[0]?.message?.content || 'Maaf, tidak bisa merespons.';
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ content: [{ text: reply }] })
+    };
 
   } catch (err) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: { message: err.message } }) };
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ error: { message: err.message } })
+    };
   }
 };
